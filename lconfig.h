@@ -270,7 +270,7 @@ static void lcfgIntPrint (struct lcfg_int* cfg, FILE* fpt) {
     fprintf(fpt, "%s%d\n", cfg->name, cfg->cur);
 }
 static void lcfgDblPrint (struct lcfg_dbl* cfg, FILE* fpt) {
-    fprintf(fpt, "%s%f\n", cfg->name, cfg->cur);
+    fprintf(fpt, "%s%.17g\n", cfg->name, cfg->cur);
 }
 static void lcfgStrPrint (struct lcfg_str* cfg, FILE* fpt) {
     fprintf(fpt, "%s%s\n", cfg->name, cfg->cur);
