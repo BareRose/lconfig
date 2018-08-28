@@ -8,13 +8,19 @@ If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 */
 
 /*
-config supports the following three configurations:
+lconfig supports the following three configurations:
 #define LCONFIG_EXTERN
     Default, should be used when using lconfig in multiple compilation units within the same project.
 #define LCONFIG_IMPLEMENTATION
     Must be defined in exactly one source file within a project for lconfig to be found by the linker.
 #define LCONFIG_STATIC
     Defines all lconfig functions as static, useful if lconfig is only used in a single compilation unit.
+
+lconfig supports the following additional options:
+#define LCONFIG_PATH
+    Sets the path of the config file used by lconfig to read/write config values. Default is "config.txt".
+#define LCONFIG_LMAX
+    Sets the maximum line length read from the config file, rarely needs to be changed. Default is 512.
 
 lconfig template:
     A template is used to tell lconfig what config values exist, what their limits and defaults are, and
@@ -27,11 +33,6 @@ lconfig template:
     #define constants are used for these IDs. NAME is a string of the name of a config value in the file.
     MIN/MAX are limits of numerical config values. LEN is the maximum length (not counting terminator)
     for string config values. DEF is the default value (must be a literal of the appropriate data type).
-
-lconfig parameters:
-    Besides the template, the parameters LCONFIG_PATH and LCONFIG_LMAX are available to set the config
-    file path (default "config.txt") and maximum config file line length (default 512) respectively.
-    The line length usually shouldn't be changed unless you use especially long string config values.
 
 <lconfig example template begin>
 //define ID constants for ints
