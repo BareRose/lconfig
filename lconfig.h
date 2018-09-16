@@ -25,7 +25,7 @@ lconfig supports the following additional options:
 lconfig template:
     A template is used to tell lconfig what config values exist, what their limits and defaults are, and
     how they are presented in the config file (along with newlines and labels, see examples further down).
-    This template is put into the #define value of LCONFIG_IMPLEMENTATION or LCONFIG_STATIC respectively.
+    The template has to be put into the #define value LCONFIG_TEMPLATE before including the implementation.
     It consists only of LCONFIG_INT(ID, NAME, MIN, MAX, DEF), LCONFIG_DBL(ID, NAME, MIN, MAX, DEF), and
     LCONFIG_STR(ID, NAME, LEN, DEF) macros for config values, and LCONFIG_LINE(...) for labels/lines.
     ID is the int ID of a config value, and must be unique within that data type, but not across data
@@ -44,8 +44,8 @@ lconfig template:
 #define FOO_CDOUBLE 2
 //define ID constants for strs
 #define FOO_ASTRING 0
-//define template through LCONFIG_IMPLEMENTATION or LCONFIG_STATIC
-#define LCONFIG_IMPLEMENTATION \
+//define template using the macros
+#define LCONFIG_TEMPLATE \
     LCONFIG_LINE("#example") \
     LCONFIG_INT(FOO_ANUMBER, "number_a", -10, 10, 0) \
     LCONFIG_INT(FOO_ADOUBLE, "double_a", 0.0, 32.0, 4.0) \
@@ -55,7 +55,8 @@ lconfig template:
     LCONFIG_STR(FOO_ASTRING, "string_a", 32, "ABCD") \
     LCONFIG_INT(FOO_BNUMBER, "number_b", 10, 20, 15) \
     LCONFIG_DBL(FOO_CDOUBLE, "double_c", 0.0, 1.0, 0.5)
-//include lconfig.h after defining the template
+//include implementation after template
+#define LCONFIG_IMPLEMENTATION
 #include <lconfig.h>
 <lconfig example template end>
 
@@ -78,7 +79,7 @@ double_c 0.5
 
 //process configuration
 #ifdef LCONFIG_STATIC
-    #define LCONFIG_IMPLEMENTATION LCONFIG_STATIC
+    #define LCONFIG_IMPLEMENTATION
     #define LCONDEF static
 #else //LCONFIG_EXTERN
     #define LCONDEF extern
@@ -112,6 +113,7 @@ LCONDEF void lconfigSetString(int, const char*);
 
 //implementation section
 #ifdef LCONFIG_IMPLEMENTATION
+#undef LCONFIG_IMPLEMENTATION
 
 //includes
 #include <math.h> //NAN for return
@@ -165,17 +167,17 @@ static void lcfgStrSet(struct lcfg_str*, const char*);
 #define LCONFIG_INT(ID, NAME, MIN, MAX, DEF) [ID] = {NAME " ", MIN, MAX, DEF, DEF},
 #define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF)
 #define LCONFIG_STR(ID, NAME, LEN, DEF)
-static struct lcfg_int lcfg_ints[] = {{0}, LCONFIG_IMPLEMENTATION};
+static struct lcfg_int lcfg_ints[] = {{0}, LCONFIG_TEMPLATE};
 #undef LCONFIG_INT
 #undef LCONFIG_DBL
 #define LCONFIG_INT(ID, NAME, MIN, MAX, DEF)
 #define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF) [ID] = {NAME " ", MIN, MAX, DEF, DEF},
-static struct lcfg_dbl lcfg_dbls[] = {{0}, LCONFIG_IMPLEMENTATION};
+static struct lcfg_dbl lcfg_dbls[] = {{0}, LCONFIG_TEMPLATE};
 #undef LCONFIG_DBL
 #undef LCONFIG_STR
 #define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF)
 #define LCONFIG_STR(ID, NAME, LEN, DEF) [ID] = {NAME " ", LEN, DEF, (char[LEN+1]){DEF}},
-static struct lcfg_str lcfg_strs[] = {{0}, LCONFIG_IMPLEMENTATION};
+static struct lcfg_str lcfg_strs[] = {{0}, LCONFIG_TEMPLATE};
 #undef LCONFIG_LINE
 #undef LCONFIG_INT
 #undef LCONFIG_DBL
@@ -218,7 +220,7 @@ LCONDEF int lconfigRead () {
 LCONDEF int lconfigWrite () {
     FILE* cfg = fopen(LCONFIG_PATH, "w");
     if (cfg) {
-        LCONFIG_IMPLEMENTATION;
+        LCONFIG_TEMPLATE;
         fclose(cfg);
         return 0;
     }
@@ -295,5 +297,4 @@ static void lcfgStrSet (struct lcfg_str* cfg, const char* val) {
     cfg->cur[len] = 0; //make sure string is properly terminated
 }
 
-#undef LCONFIG_IMPLEMENTATION //contains template
 #endif //LCONFIG_IMPLEMENTATION
