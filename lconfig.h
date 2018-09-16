@@ -72,7 +72,7 @@ double_c 0.5
 <lconfig example config.txt end>
 */
 
-//include only once
+//header section
 #ifndef LCONFIG_H
 #define LCONFIG_H
 
@@ -107,6 +107,8 @@ LCONDEF const char* lconfigGetString(int);
     //returns the value of the given string config value (NULL if invalid)
 LCONDEF void lconfigSetString(int, const char*);
     //sets the value of the given string config value (subject to clamping)
+
+#endif //LCONFIG_H
 
 //implementation section
 #ifdef LCONFIG_IMPLEMENTATION
@@ -293,5 +295,5 @@ static void lcfgStrSet (struct lcfg_str* cfg, const char* val) {
     cfg->cur[len] = 0; //make sure string is properly terminated
 }
 
+#undef LCONFIG_IMPLEMENTATION //contains template
 #endif //LCONFIG_IMPLEMENTATION
-#endif //LCONFIG_H
