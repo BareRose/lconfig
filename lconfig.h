@@ -22,39 +22,44 @@ lconfig supports the following additional options:
 #define LCONFIG_LMAX
     Sets the maximum line length read from the config file, rarely needs to be changed. Default is 512.
 
+lconfig init:
+    All config values start out at their defaults at program startup. If you wish to read/create the config
+    file immediately, you should do lconfigRead() followed by lconfigWrite(). This will cause any existing
+    config file to be read, and adjusted values to be written back, thus clamping any values in the file.
+
+lconfig double:
+    Previously lconfig supported double values directly, this however proved superfluous as fractional values
+    can almost always be expressed as scaled integers. For example a value in the range 0.0 to 1.0 could be
+    expressed as an integer in the range 0 to 1000 or similar depending on desired resolution of the value.
+
 lconfig template:
     A template is used to tell lconfig what config values exist, what their limits and defaults are, and
     how they are presented in the config file (along with newlines and labels, see examples further down).
     The template has to be put into the #define value LCONFIG_TEMPLATE before including the implementation.
-    It consists only of LCONFIG_INT(ID, NAME, MIN, MAX, DEF), LCONFIG_DBL(ID, NAME, MIN, MAX, DEF), and
-    LCONFIG_STR(ID, NAME, LEN, DEF) macros for config values, and LCONFIG_LINE(...) for labels/lines.
+    It consists only of LCONFIG_INT(ID, NAME, MIN, MAX, DEF) and LCONFIG_STR(ID, NAME, LEN, DEF) macros for
+    config values, and LCONFIG_LINE(...) for labels/lines. Scaled int should be used for fractional values.
     ID is the int ID of a config value, and must be unique within that data type, but not across data
-    types, i.e. there can be both an int and a double config value with an ID of 0. Typically enums or
+    types, i.e. there can be both an int and a string config value with an ID of 0. Typically enums or
     #define constants are used for these IDs. NAME is a string of the name of a config value in the file.
-    MIN/MAX are limits of numerical config values. LEN is the maximum length (not counting terminator)
+    MIN/MAX are the limits of int config values. LEN is the maximum length (not counting NUL terminator)
     for string config values. DEF is the default value (must be a literal of the appropriate data type).
 
 <lconfig example template begin>
 //define ID constants for ints
 #define FOO_ANUMBER 0
 #define FOO_BNUMBER 1
-//define ID constants for dbls
-#define FOO_ADOUBLE 0
-#define FOO_BDOUBLE 1
-#define FOO_CDOUBLE 2
 //define ID constants for strs
 #define FOO_ASTRING 0
+#define FOO_BSTRING 1
 //define template using the macros
 #define LCONFIG_TEMPLATE \
     LCONFIG_LINE("#example") \
     LCONFIG_INT(FOO_ANUMBER, "number_a", -10, 10, 0) \
-    LCONFIG_INT(FOO_ADOUBLE, "double_a", 0.0, 32.0, 4.0) \
     LCONFIG_LINE() \
     LCONFIG_LINE("#foobar") \
-    LCONFIG_DBL(FOO_BDOUBLE, "double_b", -32.0, 0.0, -4.0) \
     LCONFIG_STR(FOO_ASTRING, "string_a", 32, "ABCD") \
     LCONFIG_INT(FOO_BNUMBER, "number_b", 10, 20, 15) \
-    LCONFIG_DBL(FOO_CDOUBLE, "double_c", 0.0, 1.0, 0.5)
+    LCONFIG_STR(FOO_BSTRING, "string_b", 16, "FOO")
 //include implementation after template
 #define LCONFIG_IMPLEMENTATION
 #include <lconfig.h>
@@ -63,13 +68,11 @@ lconfig template:
 <lconfig example config.txt begin>
 #example
 number_a 0
-double_a 4.0
 
 #foobar
-double_b -4.0
 string_a ABCD
 number_b 15
-double_c 0.5
+string_b FOO
 <lconfig example config.txt end>
 */
 
@@ -86,8 +89,6 @@ double_c 0.5
 #endif
 
 //function declarations
-LCONDEF void lconfigInit();
-    //initializes config system, reading/writing config file if possible
 LCONDEF void lconfigDefault();
     //resets all config values to their defaults (does not write to file)
 LCONDEF int lconfigRead();
@@ -100,10 +101,6 @@ LCONDEF int lconfigGetInt(int);
     //returns the value of the given integer config value (-1 if invalid)
 LCONDEF void lconfigSetInt(int, int);
     //sets the value of the given integer config value (subject to clamping)
-LCONDEF double lconfigGetDouble(int);
-    //returns the value of the given double config value (NAN if invalid)
-LCONDEF void lconfigSetDouble(int, double);
-    //sets the value of the given double config value (subject to clamping)
 LCONDEF const char* lconfigGetString(int);
     //returns the value of the given string config value (NULL if invalid)
 LCONDEF void lconfigSetString(int, const char*);
@@ -116,9 +113,8 @@ LCONDEF void lconfigSetString(int, const char*);
 #undef LCONFIG_IMPLEMENTATION
 
 //includes
-#include <math.h> //NAN for return
 #include <string.h> //string operations
-#include <stdlib.h> //atoi/atof and others
+#include <stdlib.h> //atoi and others
 #include <stdio.h> //reading/writing config file
 
 //constants
@@ -137,13 +133,6 @@ struct lcfg_int {
     const int def; //default value
     int cur; //current value
 };
-struct lcfg_dbl {
-    const char* const name; //name in config file
-    const double min; //min value
-    const double max; //max value
-    const double def; //default value
-    double cur; //current value
-};
 struct lcfg_str {
     const char* const name; //name in config file
     const int len; //maximum length
@@ -153,46 +142,30 @@ struct lcfg_str {
 
 //function declarations
 static void lcfgIntRead(struct lcfg_int*, const char*);
-static void lcfgDblRead(struct lcfg_dbl*, const char*);
 static void lcfgStrRead(struct lcfg_str*, const char*);
 static void lcfgIntPrint(struct lcfg_int*, FILE*);
-static void lcfgDblPrint(struct lcfg_dbl*, FILE*);
 static void lcfgStrPrint(struct lcfg_str*, FILE*);
 static void lcfgIntSet(struct lcfg_int*, int);
-static void lcfgDblSet(struct lcfg_dbl*, double);
 static void lcfgStrSet(struct lcfg_str*, const char*);
 
 //internal globals
 #define LCONFIG_LINE(...)
 #define LCONFIG_INT(ID, NAME, MIN, MAX, DEF) [ID] = {NAME " ", MIN, MAX, DEF, DEF},
-#define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF)
 #define LCONFIG_STR(ID, NAME, LEN, DEF)
 static struct lcfg_int lcfg_ints[] = {{0}, LCONFIG_TEMPLATE};
 #undef LCONFIG_INT
-#undef LCONFIG_DBL
-#define LCONFIG_INT(ID, NAME, MIN, MAX, DEF)
-#define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF) [ID] = {NAME " ", MIN, MAX, DEF, DEF},
-static struct lcfg_dbl lcfg_dbls[] = {{0}, LCONFIG_TEMPLATE};
-#undef LCONFIG_DBL
 #undef LCONFIG_STR
-#define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF)
+#define LCONFIG_INT(ID, NAME, MIN, MAX, DEF)
 #define LCONFIG_STR(ID, NAME, LEN, DEF) [ID] = {NAME " ", LEN, DEF, (char[LEN+1]){DEF}},
 static struct lcfg_str lcfg_strs[] = {{0}, LCONFIG_TEMPLATE};
 #undef LCONFIG_LINE
 #undef LCONFIG_INT
-#undef LCONFIG_DBL
 #undef LCONFIG_STR
 
 //public functions
-LCONDEF void lconfigInit () {
-    lconfigRead();
-    lconfigWrite();
-}
 LCONDEF void lconfigDefault () {
     for (int i = 0; i < sizeof(lcfg_ints)/sizeof(lcfg_ints[0]); i++)
         if (lcfg_ints[i].name) lcfgIntSet(&lcfg_ints[i], lcfg_ints[i].def);
-    for (int i = 0; i < sizeof(lcfg_dbls)/sizeof(lcfg_dbls[0]); i++)
-        if (lcfg_dbls[i].name) lcfgDblSet(&lcfg_dbls[i], lcfg_dbls[i].def);
     for (int i = 0; i < sizeof(lcfg_strs)/sizeof(lcfg_strs[0]); i++)
         if (lcfg_strs[i].name) lcfgStrSet(&lcfg_strs[i], lcfg_strs[i].def);
 }
@@ -203,8 +176,6 @@ LCONDEF int lconfigRead () {
         while (fgets(txt, LCONFIG_LMAX, cfg)) {
             for (int i = 0; i < sizeof(lcfg_ints)/sizeof(lcfg_ints[0]); i++)
                 if (lcfg_ints[i].name) lcfgIntRead(&lcfg_ints[i], txt);
-            for (int i = 0; i < sizeof(lcfg_dbls)/sizeof(lcfg_dbls[0]); i++)
-                if (lcfg_dbls[i].name) lcfgDblRead(&lcfg_dbls[i], txt);
             for (int i = 0; i < sizeof(lcfg_strs)/sizeof(lcfg_strs[0]); i++)
                 if (lcfg_strs[i].name) lcfgStrRead(&lcfg_strs[i], txt);
         }
@@ -215,7 +186,6 @@ LCONDEF int lconfigRead () {
 }
 #define LCONFIG_LINE(...) fprintf(cfg, __VA_ARGS__ "\n");
 #define LCONFIG_INT(ID, NAME, MIN, MAX, DEF) lcfgIntPrint(&lcfg_ints[ID], cfg);
-#define LCONFIG_DBL(ID, NAME, MIN, MAX, DEF) lcfgDblPrint(&lcfg_dbls[ID], cfg);
 #define LCONFIG_STR(ID, NAME, LEN, DEF) lcfgStrPrint(&lcfg_strs[ID], cfg);
 LCONDEF int lconfigWrite () {
     FILE* cfg = fopen(LCONFIG_PATH, "w");
@@ -228,7 +198,6 @@ LCONDEF int lconfigWrite () {
 }
 #undef LCONFIG_LINE
 #undef LCONFIG_INT
-#undef LCONFIG_DBL
 #undef LCONFIG_STR
 LCONDEF int lconfigGetInt (int id) {
     if ((id >= 0)&&(id < sizeof(lcfg_ints)/sizeof(lcfg_ints[0]))&&(lcfg_ints[id].name))
@@ -238,15 +207,6 @@ LCONDEF int lconfigGetInt (int id) {
 LCONDEF void lconfigSetInt (int id, int val) {
     if ((id >= 0)&&(id < sizeof(lcfg_ints)/sizeof(lcfg_ints[0]))&&(lcfg_ints[id].name))
         lcfgIntSet(&lcfg_ints[id], val);
-}
-LCONDEF double lconfigGetDouble (int id) {
-    if ((id >= 0)&&(id < sizeof(lcfg_dbls)/sizeof(lcfg_dbls[0]))&&(lcfg_dbls[id].name))
-        return lcfg_dbls[id].cur;
-    return NAN;
-}
-LCONDEF void lconfigSetDouble (int id, double val) {
-    if ((id >= 0)&&(id < sizeof(lcfg_dbls)/sizeof(lcfg_dbls[0]))&&(lcfg_dbls[id].name))
-        lcfgDblSet(&lcfg_dbls[id], val);
 }
 LCONDEF const char* lconfigGetString (int id) {
     if ((id >= 0)&&(id < sizeof(lcfg_strs)/sizeof(lcfg_strs[0]))&&(lcfg_strs[id].name))
@@ -263,10 +223,6 @@ static void lcfgIntRead (struct lcfg_int* cfg, const char* txt) {
     if (strncmp(cfg->name, txt, strlen(cfg->name)) == 0)
         lcfgIntSet(cfg, atoi(&txt[strlen(cfg->name)]));
 }
-static void lcfgDblRead (struct lcfg_dbl* cfg, const char* txt) {
-    if (strncmp(cfg->name, txt, strlen(cfg->name)) == 0)
-        lcfgDblSet(cfg, atof(&txt[strlen(cfg->name)]));
-}
 static void lcfgStrRead (struct lcfg_str* cfg, const char* txt) {
     if (strncmp(cfg->name, txt, strlen(cfg->name)) == 0)
         lcfgStrSet(cfg, &txt[strlen(cfg->name)]);
@@ -274,18 +230,10 @@ static void lcfgStrRead (struct lcfg_str* cfg, const char* txt) {
 static void lcfgIntPrint (struct lcfg_int* cfg, FILE* fpt) {
     fprintf(fpt, "%s%d\n", cfg->name, cfg->cur);
 }
-static void lcfgDblPrint (struct lcfg_dbl* cfg, FILE* fpt) {
-    fprintf(fpt, "%s%.17g\n", cfg->name, cfg->cur);
-}
 static void lcfgStrPrint (struct lcfg_str* cfg, FILE* fpt) {
     fprintf(fpt, "%s%s\n", cfg->name, cfg->cur);
 }
 static void lcfgIntSet (struct lcfg_int* cfg, int val) {
-    if (val < cfg->min) val = cfg->min;
-    if (val > cfg->max) val = cfg->max;
-    cfg->cur = val;
-}
-static void lcfgDblSet (struct lcfg_dbl* cfg, double val) {
     if (val < cfg->min) val = cfg->min;
     if (val > cfg->max) val = cfg->max;
     cfg->cur = val;

@@ -8,7 +8,7 @@ source code in the form of comments. It is highly recommended that you read said
 The lconfig library provides basic config file generation based on a template, its features include:
 
 - No hard dependencies besides the standard library, making it fully portable for most purposes
-- Provides int, double, and string config parameters, enough for most common types of values
+- Provides int and string config parameters, enough for the most common types of values
 - Works even when the OS blocks file access, in which case it will simply use defaults
 - Small enough for simple demo programs, powerful enough for full applications
 
