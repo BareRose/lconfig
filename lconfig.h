@@ -112,11 +112,6 @@ LCONDEF void lconfigSetString(int, const char*);
 #ifdef LCONFIG_IMPLEMENTATION
 #undef LCONFIG_IMPLEMENTATION
 
-//includes
-#include <string.h> //string operations
-#include <stdlib.h> //atoi and others
-#include <stdio.h> //reading/writing config file
-
 //constants
 #ifndef LCONFIG_PATH
     #define LCONFIG_PATH "config.txt"
@@ -124,6 +119,11 @@ LCONDEF void lconfigSetString(int, const char*);
 #ifndef LCONFIG_LMAX
     #define LCONFIG_LMAX 512
 #endif
+
+//includes
+#include <string.h> //string operations
+#include <stdlib.h> //atoi and others
+#include <stdio.h> //reading/writing config file
 
 //structs
 struct lcfg_int {
